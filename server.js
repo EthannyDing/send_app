@@ -4,6 +4,9 @@ const express = require("express");
 const multer = require("multer");
 const fs = require('fs');
 const request = require('request');
+const path = require('path');
+const fileParse = require('./utils/fileParse')
+
 require('dotenv').config();
 
 const upload = multer({ dest: "uploads/" });
@@ -20,9 +23,8 @@ MORTALITY_URL = process.env.MORTALITY_URL
 
 console.log(`mortality_url: ${MORTALITY_URL}`)
 
-function getPostOptions(streamFile) {
+function getPostOptions(data) {
 
-    let data = fs.readFileSync(streamFile, 'utf-8');
     let postData = {   
         "options": {
             "fs": {
@@ -30,7 +32,7 @@ function getPostOptions(streamFile) {
                 "port": FS_PORT
             }
         },
-        "data": JSON.parse(data)
+        "data": data
     }
 
     const postOptions = {
@@ -51,12 +53,24 @@ app.get('/', function(req, res){
 app.post("/mortality_score", upload.single("file"), mortalityScore);
 function mortalityScore(req, res) {
     console.log('[Start]')
-
-    console.log(`__dirname: ${__dirname}`)
     console.log(req.body);
     console.log(req.file)
 
-    let postOptions = getPostOptions(req.file.path);
+    let stepData
+    const fileType = path.extname(req.file.originalname);
+
+    if (fileType == '.xml') {
+        stepData = fileParse.retrieveLastWeekStepDataFromAppleHealth(req.file.path)
+    }
+    else if (fileType == '.json') {
+        const stepDataStr = fs.readFileSync(req.file.path, 'utf-8');
+        stepData = JSON.parse(stepDataStr)
+    }
+    else {
+        throw new Error(`Unsupported input file format ${fileType}`)
+    }
+
+    let postOptions = getPostOptions(stepData);
     
     request.post(postOptions, (error, response, body) => {
         if (error) {
